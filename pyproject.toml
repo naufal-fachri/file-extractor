@@ -1,0 +1,26 @@
+[project]
+name = "file-extractor"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.12.15",
+    "bert-score>=0.3.13",
+    "bm25s>=0.2.13",
+    "docx>=0.2.4",
+    "docx2txt>=0.9",
+    "fastapi>=0.116.1",
+    "fastembed>=0.7.3",
+    "ipywidgets>=8.1.7",
+    "langchain>=0.3.27",
+    "langchain-experimental>=0.3.4",
+    "langchain-openai>=0.3.32",
+    "langchain-qdrant>=0.2.0",
+    "loguru>=0.7.3",
+    "numpy>=2.3.2",
+    "pydantic>=2.11.7",
+    "pymupdf>=1.26.4",
+    "python-dotenv>=1.1.1",
+    "unstructured>=0.18.14",
+]
