@@ -39,6 +39,19 @@ file_extractor/
 ```
 ---
 
+## 📋 Prerequisites
+
+### Local Tools
+
+For all the modules, you'll need the following tools installed locally:
+
+| Tool | Version | Purpose | Installation Link |
+|------|---------|---------|------------------|
+| Python | 3.11 | Programming language runtime | [Download](https://www.python.org/downloads/) |
+| uv | ≥ 0.4.30 | Python package installer and virtual environment manager | [Download](https://github.com/astral-sh/uv) |
+| Git | ≥2.44.0 | Version control | [Download](https://git-scm.com/downloads) |
+| Docker | ≥27.4.0 | Containerization platform | [Download](https://www.docker.com/get-started/) |
+
 ## ⚙️ Installation
 
 ### 1. Clone the repository
@@ -48,8 +61,19 @@ cd file-extractor
 ```
 
 ### 2. Install dependencies (using uv)
+
+Inside the `file-extractor` directory, to install the dependencies and activate the virtual environment, run the following commands:
+
 ```bash
-uv sync --frozen
+uv venv .venv --python 3.11
+. ./.venv/bin/activate # or source ./.venv/bin/activate
+uv pip install -e .
+```
+
+Test that you have Python 3.11 installed in your new `uv` environment:
+```bash
+uv run python --version
+# Output: Python 3.11.xx
 ```
 
 ## 🐳 Run with Docker
