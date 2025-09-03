@@ -549,6 +549,7 @@ class WordDocumentExtractor:
                     "pages": pages,
                     "success_count": success_count,
                     "failed_count": failed_count,
+                    "status": True if (success_count/len(pages)) == 1 else False,
                     "file_type": "docx"
                     }
             

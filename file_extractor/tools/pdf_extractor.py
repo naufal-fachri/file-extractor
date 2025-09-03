@@ -283,6 +283,7 @@ class PDFExtractor:
                     "pages": page_results,
                     "success_count": success_count,
                     "failed_count": failed_count,
+                    "status": True if (success_count/len(page_results)) == 1 else False,
                     "file_type": "pdf" 
                     }
 
