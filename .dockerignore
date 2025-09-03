@@ -2,6 +2,8 @@
 .env
 __pycache__
 .dockerignore
+.gitignore
+.env.example
 Dockerfile
 README.md
 .venv/
