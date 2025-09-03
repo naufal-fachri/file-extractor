@@ -11,7 +11,3 @@ wheels/
 
 # Environment
 .env
-
-# folders
-notebooks/
-source/

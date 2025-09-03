@@ -15,7 +15,7 @@ File Extractor is a modular Python project for extracting and processing content
 ---
 
 ## 📂 Project Structure
-
+```
 file_extractor/
 │
 ├── app/ # Core application logic using FastAPI
@@ -36,7 +36,7 @@ file_extractor/
 ├── pyproject.toml # Project dependencies & build config
 ├── README.md # Project documentation
 ├── uv.lock # Lock file for reproducible installs
-
+```
 ---
 
 ## ⚙️ Installation
