@@ -15,7 +15,7 @@ COPY . .
 RUN uv sync --frozen --no-cache
 
 # Copy ind ind.tessdata to ./tessdata/
-RUN mv tessdata/* /usr/share/tesseract-ocr/5/tessdata/
+RUN mv tessdata/ind.traineddata /usr/share/tesseract-ocr/5/tessdata/
 
 # Set the env path.
 ENV PYTHONPATH="/home"
