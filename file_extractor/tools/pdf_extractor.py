@@ -97,7 +97,7 @@ def _extract_page_content(file: bytes, page_index: int, extract_tables: bool = F
             page = pdf_document.load_page(page_index)
             
             # Extract text
-            raw_text = page.get_text(sort=False)
+            raw_text = page.get_text(sort=True)
             cleaned_text = TextProcessor.clean_text(raw_text)
             
             # Extract tables if requested
