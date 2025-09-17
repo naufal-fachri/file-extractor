@@ -67,13 +67,18 @@ Inside the `file-extractor` directory, to install the dependencies and activate 
 ```bash
 uv venv .venv --python 3.11
 . ./.venv/bin/activate # or source ./.venv/bin/activate
-uv pip install -e .
+uv sync --frozen
 ```
 
 Test that you have Python 3.11 installed in your new `uv` environment:
 ```bash
 uv run python --version
 # Output: Python 3.11.xx
+```
+
+## 3. Run the app
+```bash
+fastapi dev file_extractor/app/extractor.py
 ```
 
 ## 🐳 Run with Docker
