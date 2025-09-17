@@ -10,12 +10,18 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Set the working directory.
 WORKDIR /home
 
-# Install the application dependencies.
-COPY . .
+# Copy only dependency files first (leverage cache when code changes but deps don't)
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies (this layer gets cached unless deps change)
 RUN uv sync --frozen --no-cache
 
-# Copy ind ind.tessdata to ./tessdata/
+# Copy tessdata files (separate from main code for better caching)
+COPY tessdata/ tessdata/
 RUN mv tessdata/ind.traineddata /usr/share/tesseract-ocr/5/tessdata/
+
+# Copy the rest of the application code (this changes most frequently)
+COPY . .
 
 # Set the env path.
 ENV PYTHONPATH="/home"

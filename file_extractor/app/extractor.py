@@ -154,9 +154,11 @@ class OCRProcessor:
 class FileExtractionService:
     """Main service for file extraction operations."""
     
-    def __init__(self, semaphore: asyncio.Semaphore, executor: ProcessPoolExecutor):
+    def __init__(self, semaphore: asyncio.Semaphore, executor: ProcessPoolExecutor, chunker: RecursiveCharacterTextSplitter, vector_store: QdrantVectorStore):
         self.semaphore = semaphore
         self.executor = executor
+        self.chunker = chunker
+        self.vector_store = vector_store
     
     async def extract_pdf(self, content: bytes, filename: str, user_id: str, chat_id: str) -> Dict[str, Any]:
         """Extract content from PDF file."""
