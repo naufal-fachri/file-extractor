@@ -76,7 +76,7 @@ uv run python --version
 # Output: Python 3.11.xx
 ```
 
-## 3. Run the app
+### 3. Run the app
 ```bash
 fastapi dev file_extractor/app/extractor.py
 ```
