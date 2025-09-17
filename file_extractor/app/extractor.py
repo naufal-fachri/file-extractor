@@ -7,6 +7,7 @@ import subprocess
 import uvicorn
 from dataclasses import dataclass
 from pathlib import Path
+from dotenv import load_dotenv
 from typing import Dict, Any, Optional
 from io import BytesIO
 from contextlib import asynccontextmanager
@@ -25,6 +26,44 @@ except ImportError as e:
     logger.error(f"Failed to import extractors: {e}")
     raise
 
+# Import Vector Store
+try:
+    from file_extractor.tools.vectore_store import QdrantVectorStore
+except ImportError as e:
+    logger.error(f"Failed to import vector store: {e}")
+    raise
+
+# Import OPENAI Embedding
+try:
+    from langchain_openai import OpenAIEmbeddings
+except ImportError as e:
+    logger.error(f"Failed to import OpenAI Embeddings: {e}")
+    raise
+
+# Import Qdrant Client
+try:
+    from qdrant_client import AsyncQdrantClient
+except ImportError as e:
+    logger.error(f"Failed to import Qdrant Client: {e}")
+    raise
+
+# Import Document & Text Splitter
+try:
+    from langchain_core.documents import Document
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+except ImportError as e:
+    logger.error(f"Failed to import Text Splitter: {e}")
+    raise
+
+load_dotenv()
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+qdrant_api_key = os.environ.get("QDRANT_API_KEY")
+qdrant_url = os.environ.get("QDRANT_LOCATION_URL")
+
+assert openai_api_key is not None, "OpenAI API KEY doesn't exist."
+assert qdrant_api_key is not None, "Qdrant API KEY doesn't exist."
+assert qdrant_url is not None, "Qdrant URL doesn't exist."
+
 @dataclass
 class Config:
     """Application configuration."""
@@ -35,6 +74,10 @@ class Config:
     MAX_CONCURRENT_PROCESSES: int = 4
     MAX_PROCESS_WORKERS: int = max(1, os.cpu_count() // 4)
     OCR_LANGUAGES: str = "eng+ind"
+    MODEL_NAME: str = "gpt-4"
+    CHUNK_SIZE: int = 800
+    CHUNK_OVERLAP: int = 50
+    VECTOR_STORE_BATCH_SIZE: int = 100
 
 
 class FileValidationError(Exception):
@@ -196,6 +239,107 @@ class FileExtractionService:
             logger.error(f"Word extraction failed: {e}")
             return {"error": f"Word extraction failed: {str(e)}", "status": False}
     
+    async def chunk_file(self, parsed_file_result: dict, user_id: str, chat_id: str, chunker: RecursiveCharacterTextSplitter) -> list[Document]:
+        """
+        Chunk parsed file result into a list of documents.
+        
+        Args:
+            parsed_file_result: Dictionary containing parsed file data with 'filename' and 'pages' keys
+            chunker: Text splitter instance for chunking documents
+            user_id: Unique identifier for the user
+            chat_id: Unique identifier for the chat session
+            
+        Returns:
+            List of chunked Document objects
+            
+        Raises:
+            FileChunkingError: If chunking operation fails
+            KeyError: If required keys are missing from parsed_file_result
+            ValueError: If input parameters are invalid
+        """
+        # Validate input parameters
+        if not parsed_file_result:
+            raise ValueError("parsed_file_result cannot be empty")
+    
+        if not user_id or not chat_id:
+            raise ValueError("user_id and chat_id must be non-empty strings")
+        
+        # Ensure required keys are present
+        try:
+            file_name = parsed_file_result['filename']
+            pages = parsed_file_result['pages']
+        except KeyError as e:
+            raise KeyError(f"Missing required key in parsed_file_result: {e}")
+        
+        if not pages:
+            logger.warning("No pages found in parsed_file_result")
+            return []
+        
+        # create document
+        documents = []
+        for page in pages:
+            try:
+                document = Document(
+                    page_content=page["text"],
+                    metadata={
+                        "full_content": page["text"],
+                        "file_name": file_name,
+                        "user_id": user_id,
+                        "chat_id": chat_id,
+                        "page": page["page_index"]
+                    }
+                )
+                documents.append(document)
+            except KeyError as e:
+                logger.error(f"Missing expected key in page data: {e}")
+                continue
+        if not documents:
+            logger.warning("No valid documents created from pages")
+            return []
+        
+        # Chunk documents
+        try:
+            logger.info(f"Starting to chunk {len(documents)} documents from file: {file_name}")
+            chunked_documents = await chunker.atransform_documents(documents)
+            logger.info(
+                f"Successfully chunked documents from {len(pages)} pages to "
+                f"{len(chunked_documents)} chunks for file: {file_name}"
+            )
+            return chunked_documents
+        except Exception as e:
+            logger.error(f"Chunking operation failed: {e}")
+            raise Exception(f"Chunking operation failed: {e}")
+        
+    async def upsert_chunks_to_vector_store(documents: list[Document], batch_size: int, vector_store: QdrantVectorStore) -> bool:
+        """
+        Upsert chunked documents into the vector store with retry logic.
+        
+        Args:
+            documents: List of Document objects to upsert
+            vector_store: Instance of QdrantVectorStore for upserting
+            
+        Returns:
+            True if upsert is successful, False otherwise
+            
+        Raises:
+            ValueError: If input parameters are invalid
+        """
+        if not documents:
+            raise ValueError("documents list cannot be empty")
+        
+        if not vector_store:
+            raise ValueError("vector_store instance is required")
+
+        try:
+            if batch_size:
+                return await vector_store.aadd_documents(documents, batch_size=batch_size)
+            
+            return await vector_store.aadd_documents(documents)
+        
+        except Exception as e:
+            logger.error(f"Upsert operation failed: {e}")
+            return False
+
     async def process_file(self, file: UploadFile, user_id: str, chat_id: str) -> Dict[str, Any]:
         """Main file processing method."""
         try:
@@ -207,13 +351,40 @@ class FileExtractionService:
                 logger.info(f"Processing file: {file.filename}")
                 
                 if file.filename.lower().endswith('.pdf'):
-                    return await self.extract_pdf(content, file.filename, user_id, chat_id)
+                    extraction_result = await self.extract_pdf(content, file.filename, user_id, chat_id)
+
                 else:  # .docx
-                    return await self.extract_word(content, file.filename)
+                    extraction_result = await self.extract_word(content, file.filename)
+
+            # chunking and upserting document
+            logger.info(f"Chunking and upserting document: {file.filename}")
+
+            chunked_documents = await self.chunk_file(
+                parsed_file_result=extraction_result,
+                user_id=user_id,
+                chat_id=chat_id,
+                chunker=self.chunker)
+            
+            logger.info(f"Upserting {len(chunked_documents)} chunks to vector store")
+            
+            upsert_status = await self.upsert_chunks_to_vector_store(
+                documents=chunked_documents,
+                batch_size=Config.VECTOR_STORE_BATCH_SIZE,
+                vector_store=self.vector_store)
+            
+            logger.info(f"Upsert status: {upsert_status}")
+            logger.info(f"File processing completed: {file.filename}")
+            
+            return {"status": extraction_result.get("status", False) and upsert_status,
+                    "filename": file.filename,
+                    "num_pages": len(extraction_result.get("pages", [])),
+                    "num_chunks": len(chunked_documents),
+                    "error": extraction_result.get("error", None) if not extraction_result.get("status", False) else None}
                     
         except FileValidationError as e:
             logger.error(f"File validation failed: {e}")
             return {"error": str(e), "status": False}
+        
         except Exception as e:
             logger.error(f"File processing failed: {e}")
             return {"error": f"Processing failed: {str(e)}", "status": False}
@@ -223,7 +394,19 @@ class FileExtractionService:
 semaphore = asyncio.Semaphore(Config.MAX_CONCURRENT_PROCESSES)
 process_executor: Optional[ProcessPoolExecutor] = None
 extraction_service: Optional[FileExtractionService] = None
-
+embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model="text-embedding-3-large", dimensions=1024)
+qdrant_client = AsyncQdrantClient(url=qdrant_url, api_key=qdrant_api_key)
+vector_store = QdrantVectorStore(client=qdrant_client,
+                                    embedding_function=embeddings,
+                                    collection_name="file-chat-history",
+                                    vector_name="dense",
+                                    retrieval_mode="dense")
+chunker = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+    model_name=Config.MODEL_NAME,
+    chunk_size=Config.CHUNK_SIZE,
+    chunk_overlap=Config.CHUNK_OVERLAP,
+    separators=["\n\n", "\n", " ", ",", "."]
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -233,7 +416,11 @@ async def lifespan(app: FastAPI):
     # Startup
     try:
         process_executor = ProcessPoolExecutor(max_workers=Config.MAX_PROCESS_WORKERS)
-        extraction_service = FileExtractionService(semaphore, process_executor)
+        extraction_service = FileExtractionService(semaphore=semaphore,
+                                                   executor=process_executor,
+                                                   chunker=chunker,
+                                                   vector_store=vector_store)
+
         logger.info(f"Started process executor with {Config.MAX_PROCESS_WORKERS} workers")
     except Exception as e:
         logger.error(f"Failed to initialize services: {e}")
@@ -246,7 +433,6 @@ async def lifespan(app: FastAPI):
         logger.info("Shutting down process executor...")
         process_executor.shutdown(wait=True)
         logger.info("Process executor shut down complete")
-
 
 # FastAPI app initialization
 app = FastAPI(
