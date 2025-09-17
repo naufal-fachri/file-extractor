@@ -93,7 +93,7 @@ class QdrantVectorStore:
         self,
         client: AsyncQdrantClient,
         collection_name: str,
-        embedding: Embeddings,
+        embeddings: Embeddings,
         vector_name: str = DENSE_VECTOR_DEFAULT_NAME,
         content_payload_key: str = CONTENT_KEY,
         metadata_payload_key: str = METADATA_KEY,
@@ -121,7 +121,7 @@ class QdrantVectorStore:
         # Configuration
         self.client = client
         self.collection_name = collection_name
-        self.embedding = embedding
+        self.embeddings = embeddings
         self.retrieval_mode = retrieval_mode
         self.distance = distance
         self.vector_name = vector_name
@@ -222,7 +222,7 @@ class QdrantVectorStore:
         with self._timer(f"Dense embedding generation for batch of {len(batch)}"):
             try:
                 contents = [doc.page_content for doc in batch]
-                vectors = await self.embedding.aembed_documents(texts=contents, chunk_size=len(batch))
+                vectors = await self.embeddings.aembed_documents(texts=contents, chunk_size=len(batch))
                 
                 if len(batch) != len(vectors):
                     raise QdrantVectorStoreError(
@@ -297,7 +297,7 @@ class QdrantVectorStore:
                 contents = [doc.page_content for doc in batch]
                 
                 # Generate embeddings concurrently if possible
-                dense_vectors = await self.embedding.aembed_documents(texts=contents, chunk_size=len(batch))
+                dense_vectors = await self.embeddings.aembed_documents(texts=contents, chunk_size=len(batch))
                 sparse_vectors = await self.sparse_embedding.aembed_documents(texts=contents, chunk_size=len(batch))
                 
                 if len(batch) != len(dense_vectors) or len(batch) != len(sparse_vectors):
@@ -505,7 +505,7 @@ class QdrantVectorStore:
             }
 
             if self.retrieval_mode == "dense":
-                query_embedding = await self.embedding.aembed_query(query)
+                query_embedding = await self.embeddings.aembed_query(query)
                 results = await self.client.query_points(
                     query=query_embedding,
                     using=self.vector_name,
@@ -524,7 +524,7 @@ class QdrantVectorStore:
                 ).points
 
             elif self.retrieval_mode == "hybrid":
-                query_dense = await self.embedding.aembed_query(query)
+                query_dense = await self.embeddings.aembed_query(query)
                 query_sparse = await self.sparse_embedding.aembed_query(query)
                 
                 results = await self.client.query_points(

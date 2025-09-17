@@ -397,10 +397,10 @@ extraction_service: Optional[FileExtractionService] = None
 embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key, model="text-embedding-3-large", dimensions=1024)
 qdrant_client = AsyncQdrantClient(url=qdrant_url, api_key=qdrant_api_key)
 vector_store = QdrantVectorStore(client=qdrant_client,
-                                    embedding_function=embeddings,
-                                    collection_name="file-chat-history",
-                                    vector_name="dense",
-                                    retrieval_mode="dense")
+                                embeddings=embeddings,
+                                collection_name="file-chat-history",
+                                vector_name="dense",
+                                retrieval_mode="dense")
 chunker = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
     model_name=Config.MODEL_NAME,
     chunk_size=Config.CHUNK_SIZE,
