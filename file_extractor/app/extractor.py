@@ -312,7 +312,7 @@ class FileExtractionService:
             logger.error(f"Chunking operation failed: {e}")
             raise Exception(f"Chunking operation failed: {e}")
         
-    async def upsert_chunks_to_vector_store(documents: list[Document], batch_size: int, vector_store: QdrantVectorStore) -> bool:
+    async def upsert_chunks_to_vector_store(self, documents: list[Document], batch_size: int, vector_store: QdrantVectorStore) -> bool:
         """
         Upsert chunked documents into the vector store with retry logic.
         
@@ -370,9 +370,7 @@ class FileExtractionService:
             logger.info(f"Upserting {len(chunked_documents)} chunks to vector store")
             
             upsert_status = await self.upsert_chunks_to_vector_store(
-                documents=chunked_documents,
-                batch_size=Config.VECTOR_STORE_BATCH_SIZE,
-                vector_store=self.vector_store)
+                documents=chunked_documents, batch_size=Config.VECTOR_STORE_BATCH_SIZE, vector_store=self.vector_store)
             
             logger.info(f"Upsert status: {upsert_status}")
             logger.info(f"File processing completed: {file.filename}")
@@ -435,6 +433,11 @@ async def lifespan(app: FastAPI):
         logger.info("Shutting down process executor...")
         process_executor.shutdown(wait=True)
         logger.info("Process executor shut down complete")
+
+    # Shutdown Qdrant client
+    if qdrant_client:
+        await qdrant_client.close()
+        logger.info("Qdrant client connection closed")
 
 # FastAPI app initialization
 app = FastAPI(

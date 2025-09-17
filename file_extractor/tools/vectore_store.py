@@ -211,9 +211,9 @@ class QdrantVectorStore:
             elapsed = time.time() - start_time
             logger.debug(f"{operation} completed in {elapsed:.2f}s")
 
-    def generate_point_id(self, file_name: str, user_id: str, chat_id: str, doc_idx: str) -> str:
+    def generate_point_id(self, file_name: str, user_id: str, chat_id: str, chunk_text: str, doc_idx: str) -> str:
         """Generate deterministic point ID"""
-        content = f"{user_id}_{chat_id}_{file_name}_{doc_idx}"
+        content = f"{user_id}_{chat_id}_{file_name}_{chunk_text}_{doc_idx}"
         return str(uuid.uuid5(uuid.NAMESPACE_DNS, content))
 
     async def async_generate_points_dense(self, batch: List[Document]) -> List[models.PointStruct]:
@@ -235,6 +235,7 @@ class QdrantVectorStore:
                         id=self.generate_point_id(file_name=doc.metadata["file_name"],
                                                   user_id=doc.metadata["user_id"],
                                                   chat_id=doc.metadata["chat_id"],
+                                                  chunk_text=doc.page_content,
                                                   doc_idx=idx),
                         payload={
                             self.content_payload_key: doc.page_content,
@@ -269,6 +270,7 @@ class QdrantVectorStore:
                         id=self.generate_point_id(file_name=doc.metadata["file_name"],
                                                   user_id=doc.metadata["user_id"],
                                                   chat_id=doc.metadata["chat_id"],
+                                                  chunk_text=doc.page_content,
                                                   doc_idx=idx),
                         payload={
                             self.content_payload_key: doc.page_content,
@@ -312,6 +314,7 @@ class QdrantVectorStore:
                         id=self.generate_point_id(file_name=doc.metadata["file_name"],
                                                   user_id=doc.metadata["user_id"],
                                                   chat_id=doc.metadata["chat_id"],
+                                                  chunk_text=doc.page_content,
                                                   doc_idx=idx),
                         payload={
                             self.content_payload_key: doc.page_content,
@@ -360,7 +363,7 @@ class QdrantVectorStore:
         return False
 
 
-    async def aadd_documents(self, documents: List[Document], batch_size: int = DEFAULT_BATCH_SIZE) -> None:
+    async def aadd_documents(self, documents: List[Document], batch_size: int = DEFAULT_BATCH_SIZE) -> bool:
         """
         Async version of add_documents with improved concurrency
         """
@@ -383,13 +386,13 @@ class QdrantVectorStore:
                     logger.debug(f"Processing async batch {batch_idx + 1}/{len(batches)} ({len(batch)} documents)")
                     
                     if self.retrieval_mode == "dense":
-                        points = await self.as_generate_points_dense(batch)
+                        points = await self.async_generate_points_dense(batch)
 
                     elif self.retrieval_mode == "sparse":
-                        points = await self.a_generate_points_sparse(batch)
+                        points = await self.async_generate_points_sparse(batch)
 
                     elif self.retrieval_mode == "hybrid":
-                        points = await self.a_generate_points_hybrid(batch)
+                        points = await self.async_generate_points_hybrid(batch)
 
                     else:
                         raise QdrantVectorStoreError(f"Invalid retrieval mode: {self.retrieval_mode}")
@@ -421,12 +424,14 @@ class QdrantVectorStore:
             
             if errors:
                 logger.error(f"Failed to process {len(errors)} batches: {errors}")
-                raise QdrantVectorStoreError(f"{len(errors)} batches failed during async processing")
+                return False
+            
             else:
                 logger.info(
                     f"Successfully added all {total_points} points from {len(batches)} batches "
                     f"to collection '{self.collection_name}' in {elapsed_time:.2f}s (async)"
                 )
+                return True
 
         except Exception as e:
             logger.error(f"Critical error in async add_documents: {e}")
